@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from fastapi.middleware.cors import CORSMiddleware
+
 from src.api.health import router as health_router
 from src.common.config.config import AppConfig
 from src.common.db.session import dispose_engine
@@ -27,6 +29,13 @@ def create_app() -> FastAPI:
         version=AppConfig.VERSION,
         description="Personal AI memory API with journal storage and RAG retrieval.",
         lifespan=lifespan,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     register_exception_handlers(app)
     app.include_router(health_router)

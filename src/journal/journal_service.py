@@ -142,22 +142,26 @@ class JournalService:
         return ReindexResponse(reindexed_count=len(entries))
 
     async def _summarize(self, *, title: str, transcript: str) -> str:
-        return await self._llm_provider.chat_completion(
-            [
-                ChatMessage(
-                    role=Constants.SYSTEM_ROLE,
-                    content=MemoryPrompts.SUMMARY_SYSTEM,
-                ),
-                ChatMessage(
-                    role=Constants.USER_ROLE,
-                    content=MemoryPrompts.SUMMARY_USER_TEMPLATE.format(
-                        title=title,
-                        transcript=transcript,
+        try:
+            return await self._llm_provider.chat_completion(
+                [
+                    ChatMessage(
+                        role=Constants.SYSTEM_ROLE,
+                        content=MemoryPrompts.SUMMARY_SYSTEM,
                     ),
-                ),
-            ],
-            temperature=0.1,
-        )
+                    ChatMessage(
+                        role=Constants.USER_ROLE,
+                        content=MemoryPrompts.SUMMARY_USER_TEMPLATE.format(
+                            title=title,
+                            transcript=transcript,
+                        ),
+                    ),
+                ],
+                temperature=0.1,
+            )
+        except Exception as e:
+            logger.warning(f"Summarization failed, using fallback: {e}")
+            return transcript[:150] + "..." if len(transcript) > 150 else transcript
 
     async def _embed_entry(
         self,
@@ -166,6 +170,10 @@ class JournalService:
         transcript: str,
         summary: str,
     ) -> list[float]:
-        text = f"Title: {title}\nSummary: {summary}\nTranscript: {transcript}"
-        embeddings = await self._llm_provider.embed([text])
-        return embeddings[0]
+        try:
+            text = f"Title: {title}\nSummary: {summary}\nTranscript: {transcript}"
+            embeddings = await self._llm_provider.embed([text])
+            return embeddings[0]
+        except Exception as e:
+            logger.warning(f"Embedding failed, using fallback: {e}")
+            return [0.0] * 1536

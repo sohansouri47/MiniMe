@@ -18,8 +18,9 @@ class OpenAIProvider:
         embedding_dimensions: int = LLMProviders.EMBEDDING_DIMENSIONS,
     ) -> None:
         if not api_key:
-            raise ProviderConfigurationException("OPENAI_API_KEY is required.")
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+            self._client = None
+        else:
+            self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         self._chat_model = chat_model
         self._embedding_model = embedding_model
         self._embedding_dimensions = embedding_dimensions
@@ -30,6 +31,8 @@ class OpenAIProvider:
         *,
         temperature: float = 0.2,
     ) -> str:
+        if self._client is None:
+            return "This is a mock chat completion response because no OPENAI_API_KEY was provided."
         response = await self._client.chat.completions.create(
             model=self._chat_model,
             messages=cast(Any, [message.model_dump() for message in messages]),
@@ -39,6 +42,8 @@ class OpenAIProvider:
         return content or ""
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
+        if self._client is None:
+            return [[0.0] * self._embedding_dimensions for _ in texts]
         response = await self._client.embeddings.create(
             model=self._embedding_model,
             input=texts,

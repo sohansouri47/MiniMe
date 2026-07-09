@@ -41,29 +41,43 @@ class QueryService:
         if user is None:
             raise NotFoundException("No memories found for this user.")
 
-        query_embedding = (await self._llm_provider.embed([payload.question]))[0]
+        try:
+            query_embedding = (await self._llm_provider.embed([payload.question]))[0]
+        except Exception as e:
+            logger.warning(f"Query embedding failed, using fallback: {e}")
+            query_embedding = [0.0] * 1536
+
         entries = await self._journal_repository.semantic_search(
             user_id=user.id,
             query_embedding=query_embedding,
             limit=payload.top_k,
         )
         context = self._build_context(entries)
-        answer = await self._llm_provider.chat_completion(
-            [
-                ChatMessage(
-                    role=Constants.SYSTEM_ROLE,
-                    content=MemoryPrompts.RAG_SYSTEM,
-                ),
-                ChatMessage(
-                    role=Constants.USER_ROLE,
-                    content=MemoryPrompts.RAG_USER_TEMPLATE.format(
-                        question=payload.question,
-                        context=context,
+
+        try:
+            answer = await self._llm_provider.chat_completion(
+                [
+                    ChatMessage(
+                        role=Constants.SYSTEM_ROLE,
+                        content=MemoryPrompts.RAG_SYSTEM,
                     ),
-                ),
-            ],
-            temperature=0.2,
-        )
+                    ChatMessage(
+                        role=Constants.USER_ROLE,
+                        content=MemoryPrompts.RAG_USER_TEMPLATE.format(
+                            question=payload.question,
+                            context=context,
+                        ),
+                    ),
+                ],
+                temperature=0.2,
+            )
+        except Exception as e:
+            logger.warning(f"Query chat completion failed, using fallback: {e}")
+            if entries:
+                memories_str = ", ".join(f'"{e.title}"' for e in entries)
+                answer = f"I found some related memories: {memories_str}. However, I couldn't connect to my AI core to synthesize a full answer."
+            else:
+                answer = "I couldn't access my AI core to search your memories at the moment. Try writing more journal entries first!"
 
         await self._chat_history_repository.create(
             user_id=user.id,
